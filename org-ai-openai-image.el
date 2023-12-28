@@ -23,6 +23,60 @@
 ;;; Code:
 
 (require 'org-ai-openai)
+(require 'json)
+(require 'cl-lib)
+
+(defun hash-table-to-alist (hash-table)
+  "Convert a hash-table to an alist."
+  (let ((alist nil))
+    (maphash (lambda (key value)
+               (push (cons key value) alist))
+             hash-table)
+    alist))
+
+(defun is-json-string-p (string)
+  "Check if STRING is a valid JSON."
+  (condition-case nil
+      (progn
+        (json-read-from-string string)
+        t) ; If parsing succeeds, return `t` for true.
+    (error nil))) ; If an error occurs, return `nil`.
+
+(defun update-b64-json-in-data-array (parsed-json new-value)
+  "Update 'b64_json' key in the data entries of PARSED-JSON."
+  (let ((data-array (gethash "data" parsed-json)))
+    (when (and data-array (vectorp data-array))
+      (cl-loop for item across data-array do
+               (when (hash-table-p item) ; Ensure each element is a hash-table
+                 (puthash "b64_json" new-value item))))))
+
+(defun print-hash-table-to-messages (hash-table)
+  "Print each entry in the HASH-TABLE to the *Messages* buffer."
+  (maphash (lambda (key value)
+             (message "%s: %S" key value))
+           hash-table))
+
+(defun print-json2message (data)
+  "This function is to print the passed json to the messages buffer."
+  ;; Check if passed string is valid JSON
+  (if (is-json-string-p data)
+      ;; if valid json
+      (progn
+	(message "valid_json")
+	;; (message "%s" data)
+	(let ((json-object-type 'hash-table))
+	    (let ((json-string data))
+	      (let ((parsed-json (json-read-from-string json-string)))
+		;; Update 'b64_json' in the nested hash-tables within 'data' to 'something_else'
+		(update-b64-json-in-data-array parsed-json "something_else")
+		;; At this point, parsed-json contains the updated hash-tables.
+		;; Now, print the updated main hash-table to the *Messages* buffer.
+		;; (print-hash-table-to-messages parsed-json)
+		(let ((my-alist (hash-table-to-alist parsed-json)))
+		  (let ((json-encoding-pretty-print t))
+		    (message "%s" (json-encode my-alist))))))))
+    (message "ERROR: Not valid JSON"))
+  (message "----------------------------------------"))
 
 (defcustom org-ai-image-directory (expand-file-name "org-ai-images/" org-directory)
   "Directory where images are stored."
@@ -88,6 +142,8 @@ Also save the `PROMPT' to a file."
                      (org-ai--image-save-base64-payload (alist-get 'b64_json ea) file-name)
                      file-name)))
 
+;; changed the size default from 256x256 to 1024x1024
+;;
 (defun org-ai--make-up-new-image-file-name (dir size &optional n)
   "Make up a new file name for an image. Use `DIR' as the directory.
 Use `SIZE' to determine the file name. If `N' is given, append it
@@ -158,8 +214,10 @@ given, call it with the file name of the image as argument."
                                       ("Content-Type" . "application/json")))
          (url-request-method "POST")
          (endpoint org-ai-openai-image-generation-endpoint)
+	 (model "dall-e-3")
+	 (quality "hd")
          (n (or n 1))
-         (size (or size "256x256"))
+         (size (or size "1024x1024"))
          (response-format "b64_json")
          (url-request-data (json-encode (map-filter (lambda (x _) x)
                                                     `(,@(when model `((model . ,model)))
@@ -169,6 +227,9 @@ given, call it with the file name of the image as argument."
                                                       (n . ,n)
                                                       (response_format . ,response-format)
                                                       (size . ,size))))))
+    (message "REQUEST %s"
+	     (let ((json-encoding-pretty-print t))
+	       (json-encode url-request-data)))
 
     (org-ai-image-interrupt-current-request)
 
@@ -177,7 +238,15 @@ given, call it with the file name of the image as argument."
     (setq org-ai--current-request-buffer-for-image
           (url-retrieve
            endpoint
-           (lambda (_events)
+           (lambda (status)
+	     (if (plist-get status :error)
+		 (message "Error retrieving URL: %s" (plist-get status :error)))
+	     ;; Move to the beginning of the response body
+	     (when (search-forward-regexp "\n\n" nil t)
+	       ;; Read and print the entire response body
+	       (let ((response-body (decode-coding-string (buffer-substring (point) (point-max)) 'utf-8)))
+		 ;; (message "RESPONSE: %s" response-body)))
+		 (print-json2message response-body)))
              (when (and (boundp 'url-http-end-of-headers) url-http-end-of-headers)
                (goto-char url-http-end-of-headers)
                (setq org-ai--current-request-buffer-for-image nil)
@@ -198,6 +267,8 @@ given, call it with the file name of the image as argument."
     (setq org-ai--current-request-buffer-for-image nil))
   (org-ai--load-image-stop-animation))
 
+;; changed the size default from 256x256 to 1024x1024
+;;
 (defun org-ai-create-and-embed-image (context)
   "Create an image with the prompt from the current block.
 Embed the image in the current buffer. `CONTEXT' is the context
