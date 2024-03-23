@@ -227,9 +227,25 @@ given, call it with the file name of the image as argument."
                                                       (n . ,n)
                                                       (response_format . ,response-format)
                                                       (size . ,size))))))
-    (message "REQUEST %s"
-	     (let ((json-encoding-pretty-print t))
-	       (json-encode url-request-data)))
+    (message "REQUEST %s" url-request-data)
+    (url-retrieve
+     endpoint
+     (lambda (status)
+       (if (plist-get status :error)
+	   (message "Error retrieving URL: %s" (plist-get status :error)))
+	 ;; Move to the beginning of the response body
+       (when (search-forward-regexp "\n\n" nil t)
+	 ;; Read and print the entire response body
+	 (let ((response-body (decode-coding-string (buffer-substring (point) (point-max)) 'utf-8)))
+	   ;; (message "RESPONSE: %s" response-body)))
+	   (print-json2message response-body)))
+       (when (and (boundp 'url-http-end-of-headers) url-http-end-of-headers)
+         (goto-char url-http-end-of-headers)
+         (let ((files (org-ai--images-save (json-read) size prompt)))
+           (when callback
+             (cl-loop for file in files
+		      for i from 0
+		      do (funcall callback file i)))))))))
 
     (org-ai-image-interrupt-current-request)
 
