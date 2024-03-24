@@ -202,6 +202,15 @@ to the file name."
   "Internal var that stores the current request buffer.
 For image generation.")
 
+(defun org-ai-image-interrupt-current-request ()
+  "Interrupt the current request."
+  (interactive)
+  (when (and org-ai--current-request-buffer-for-image (buffer-live-p org-ai--current-request-buffer-for-image))
+    (let (kill-buffer-query-functions)
+      (kill-buffer org-ai--current-request-buffer-for-image))
+    (setq org-ai--current-request-buffer-for-image nil))
+  (org-ai--load-image-stop-animation))
+
 (cl-defun org-ai--image-request (prompt &optional &key n size style quality model callback)
   "Generate an image with `PROMPT'. Use `SIZE' to determine the size of the image.
 `N' specifies the number of images to generate. If `CALLBACK' is
@@ -245,7 +254,7 @@ given, call it with the file name of the image as argument."
            (when callback
              (cl-loop for file in files
 		      for i from 0
-		      do (funcall callback file i)))))))))
+		      do (funcall callback file i)))))))
 
     (org-ai-image-interrupt-current-request)
 
@@ -273,15 +282,6 @@ given, call it with the file name of the image as argument."
                             for i from 0
                             do (funcall callback file i))))))))))
 
-
-(defun org-ai-image-interrupt-current-request ()
-  "Interrupt the current request."
-  (interactive)
-  (when (and org-ai--current-request-buffer-for-image (buffer-live-p org-ai--current-request-buffer-for-image))
-    (let (kill-buffer-query-functions)
-      (kill-buffer org-ai--current-request-buffer-for-image))
-    (setq org-ai--current-request-buffer-for-image nil))
-  (org-ai--load-image-stop-animation))
 
 ;; changed the size default from 256x256 to 1024x1024
 ;;
