@@ -171,7 +171,7 @@ If `CALLBACK' is non-nil, call it when done."
   (org-ai-talk--ensure-read-buffer)
   (cond
    (org-ai-talk-use-greader
-    (org-ai-talk--read-region-greader from to callback))
+    (org-ai-talk--read-region-openai-tts from to callback))
    ((string-equal system-type "darwin")
     (org-ai-talk--read-region-macos from to callback))
    (t
@@ -189,6 +189,32 @@ Uses greader / espeak, should work on all platforms where espeak is installed."
             (org-ai-talk--wait-for-greader callback))
         (warn "no sentence"))
     (error "Greader not installed")))
+
+(defun org-ai-talk--read-region-openai-tts (from to &optional callback)
+  "Read the text from the selected region using OpenAI's TTS model."
+  (interactive "r")
+  (message "read-region")
+  (if-let ((text (buffer-substring-no-properties from to)))
+      (let ((script-path "/home/kayal/test/voice/quick.sh"))
+        ;; Displaying the text for debugging purposes
+        (message "Text: %s" text)
+        ;; Call the script with the selected text
+        (message "Script path: %s" script-path)
+        (let ((command-output (shell-command-to-string 
+                               (format "%s %s" 
+                                       (shell-quote-argument script-path) 
+                                       (shell-quote-argument text)))))
+          (message "Command output: %s" command-output))
+        ;; Play the output MP3 file, assuming it's saved as "speech.mp3" in the current directory
+        (let ((playback-output (shell-command-to-string "/home/kayal/test/voice/play.sh")))
+          (message "Playback output: %s" playback-output))
+        ;; If a callback is provided, call it
+	  (when callback (funcall callback)))
+	  ;; This message is displayed if no text is selected
+    (message "No text selected."))
+  ;; Message indicating the end of the function for debugging
+  (message "end read-region"))
+
 
 (defun org-ai-talk--read-region-macos (from to &optional callback)
   "Read the region from `FROM' to `TO'.
