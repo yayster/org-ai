@@ -204,10 +204,12 @@ Uses greader / espeak, should work on all platforms where espeak is installed."
                                (format "%s %s" 
                                        (shell-quote-argument script-path) 
                                        (shell-quote-argument text)))))
-          (message "Command output: %s" command-output))
+          ;; (message "Command output: %s" command-output)
+	  )
         ;; Play the output MP3 file, assuming it's saved as "speech.mp3" in the current directory
         (let ((playback-output (shell-command-to-string "/home/kayal/test/voice/play.sh")))
-          (message "Playback output: %s" playback-output))
+          ;; (message "Playback output: %s" playback-output)
+	  )
         ;; If a callback is provided, call it
 	  (when callback (funcall callback)))
 	  ;; This message is displayed if no text is selected
